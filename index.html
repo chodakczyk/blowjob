@@ -161,12 +161,12 @@
         
         .action-buttons {
             display: flex;
+            justify-content: center; /* Wyśrodkowanie przycisku Reset */
             gap: 15px;
             margin-top: 20px;
         }
         
         .btn {
-            flex: 1;
             padding: 16px;
             border: none;
             border-radius: 8px;
@@ -179,6 +179,7 @@
             justify-content: center;
             gap: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            max-width: 200px; /* Mniejsza szerokość dla pojedynczego przycisku */
         }
         
         .btn:hover {
@@ -188,11 +189,6 @@
         
         .btn:active {
             transform: translateY(1px);
-        }
-        
-        .btn.calculate {
-            background: linear-gradient(to right, var(--accent), var(--highlight));
-            color: var(--primary);
         }
         
         .btn.reset {
@@ -295,6 +291,7 @@
             
             .action-buttons {
                 flex-direction: column;
+                align-items: center;
             }
             
             h1 {
@@ -346,9 +343,6 @@
             </div>
             
             <div class="action-buttons">
-                <button class="btn calculate" onclick="calculateCount()">
-                    <span>Oblicz Licznik Kart</span>
-                </button>
                 <button class="btn reset" onclick="resetCounter()">
                     <span>Resetuj Karty</span>
                 </button>
@@ -404,6 +398,10 @@
     </div>
 
     <script>
+        // Zmienne do śledzenia animacji
+        let runningCountAnimationId;
+        let trueCountAnimationId;
+        
         // Funkcja dodająca kartę do pola tekstowego
         document.querySelectorAll('.card-btn').forEach(button => {
             button.addEventListener('click', function() {
@@ -425,6 +423,9 @@
                 
                 // Automatyczne przewijanie do końca
                 textarea.scrollTop = textarea.scrollHeight;
+                
+                // Wywołaj obliczenia po dodaniu karty
+                calculateCount();
             });
         });
         
@@ -465,14 +466,22 @@
             }
             
             // Aktualizacja wyników z animacją
-            animateValue('runningCount', parseInt(document.getElementById('runningCount').textContent), runningCount, 800);
-            animateValue('trueCount', parseFloat(document.getElementById('trueCount').textContent) || 0, trueCount, 800);
+            animateValue('runningCount', parseInt(document.getElementById('runningCount').textContent), runningCount, 500);
+            animateValue('trueCount', parseFloat(document.getElementById('trueCount').textContent) || 0, trueCount, 500);
         }
         
         // Funkcja animująca zmianę wartości
         function animateValue(id, start, end, duration) {
+            // Anuluj istniejącą animację dla tego elementu
+            if (id === 'runningCount' && runningCountAnimationId) {
+                cancelAnimationFrame(runningCountAnimationId);
+            } else if (id === 'trueCount' && trueCountAnimationId) {
+                cancelAnimationFrame(trueCountAnimationId);
+            }
+
             const obj = document.getElementById(id);
             let startTimestamp = null;
+            
             const step = (timestamp) => {
                 if (!startTimestamp) startTimestamp = timestamp;
                 const progress = Math.min((timestamp - startTimestamp) / duration, 1);
@@ -481,32 +490,63 @@
                 if (id === 'runningCount') {
                     obj.textContent = Math.floor(value);
                 } else {
+                    // Dla trueCount używamy ciągów znaków dla nieskończoności
+                    if (typeof end === 'string') {
+                        obj.textContent = end;
+                        return;
+                    }
                     obj.textContent = progress === 1 ? end : value.toFixed(2);
                 }
                 
                 if (progress < 1) {
-                    window.requestAnimationFrame(step);
+                    // Zapisz id animacji do odpowiedniej zmiennej
+                    if (id === 'runningCount') {
+                        runningCountAnimationId = requestAnimationFrame(step);
+                    } else {
+                        trueCountAnimationId = requestAnimationFrame(step);
+                    }
                 }
             };
-            window.requestAnimationFrame(step);
+            
+            // Rozpocznij animację i zapisz id
+            const animationId = requestAnimationFrame(step);
+            if (id === 'runningCount') {
+                runningCountAnimationId = animationId;
+            } else {
+                trueCountAnimationId = animationId;
+            }
         }
         
         // Funkcja resetująca licznik
         function resetCounter() {
             document.getElementById('cards').value = '';
-            animateValue('runningCount', parseInt(document.getElementById('runningCount').textContent), 0, 500);
-            animateValue('trueCount', parseFloat(document.getElementById('trueCount').textContent), 0, 500);
+            calculateCount();
+        }
+        
+        // Funkcja debounce do ograniczenia częstotliwości wywołań
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
         }
         
         // Inicjalizacja
         document.addEventListener('DOMContentLoaded', function() {
-            // Dodanie obsługi klawisza Enter w polu tekstowym
-            document.getElementById('cards').addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    calculateCount();
-                }
-            });
+            // Nasłuchiwanie zmian w textarea z debounce 300ms
+            const cardsInput = document.getElementById('cards');
+            cardsInput.addEventListener('input', debounce(calculateCount, 300));
+            
+            // Nasłuchiwanie zmian w liczbie talii
+            document.getElementById('decks').addEventListener('change', calculateCount);
+            
+            // Oblicz początkowy stan
+            calculateCount();
         });
     </script>
 </body>
